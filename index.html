@@ -1,0 +1,83 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FOMO Desk"><meta name="theme-color" content="#07080c">
+<link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-180.png"><link rel="icon" href="icon.svg">
+<title>FOMO Desk</title>
+<style>
+:root{--bg:#07080c;--card:#12141b;--line:#1e2230;--mut:#8a90a2;--txt:#f3f4f8;--grn:#22c55e;--red:#ef4444;--blu:#4f6bf5}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,sans-serif;padding-bottom:84px}
+.wrap{max-width:430px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 12px) 16px 0}
+.top{display:flex;align-items:center;gap:10px}.av{width:36px;height:36px;border-radius:50%;background:var(--blu);display:grid;place-items:center;font-weight:700}
+.top .h{font-weight:600}.mode{margin-left:auto;font-size:12px;padding:4px 10px;border-radius:99px;background:#2a2410;color:#facc15;font-weight:600}.mode.live{background:#2b1012;color:var(--red)}
+.bal{font-size:52px;font-weight:700;letter-spacing:-1.5px;margin:18px 0 2px}.delta{display:flex;align-items:center;gap:8px;font-weight:600}
+.pos{color:var(--grn)}.neg{color:var(--red)}.pill{font-size:12px;padding:3px 8px;border-radius:99px;background:rgba(34,197,94,.15)}.pill.neg{background:rgba(239,68,68,.15)}
+.sub{color:var(--mut);font-size:12px;margin-top:4px}svg.chart{width:100%;height:150px;margin:12px 0 14px;display:block}
+.card{background:var(--card);border-radius:18px;padding:14px;margin-bottom:14px}.card h3{margin:0 0 10px;font-size:13px;color:var(--mut);font-weight:600;display:flex;justify-content:space-between}
+.screen{aspect-ratio:16/10;border-radius:12px;background:#000 center/contain no-repeat;display:grid;place-items:center;color:var(--mut);font-size:13px;border:1px solid var(--line)}
+.ord{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px}.dots{margin-left:auto;display:flex;gap:5px}.dot{width:9px;height:9px;border-radius:50%;background:#555}.dot.ok{background:var(--grn)}.dot.bad{background:var(--red)}
+.row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line);color:inherit;text-decoration:none}.row:first-child{border-top:0}
+.ic{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;font-size:17px;flex:none}.row .t{font-weight:600}.row .s{color:var(--mut);font-size:12px}.row .r{margin-left:auto;text-align:right;font-size:13px}
+.tabs{position:fixed;bottom:0;left:0;right:0;background:rgba(7,8,12,.94);backdrop-filter:blur(12px);border-top:1px solid var(--line);display:flex;padding:8px 0 calc(env(safe-area-inset-bottom) + 8px)}
+.tabs a{flex:1;text-align:center;color:var(--mut);font-size:11px;text-decoration:none}.tabs a.on{color:var(--txt)}.tabs a i{display:block;font-style:normal;font-size:20px}
+.view{display:none}.view.on{display:block}.empty{color:var(--mut);text-align:center;padding:22px 0;font-size:13px}a{color:var(--blu)}
+.kv{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-top:1px solid var(--line)}.kv:first-child{border-top:0}.kv span:first-child{color:var(--mut)}
+</style></head><body>
+<div class="wrap">
+ <div class="top"><div class="av" id="av">T</div><div><div class="h" id="handle">@ThinManyCanid</div><div class="sub" id="sync">loading…</div></div><span class="mode" id="mode">—</span></div>
+ <section class="view on" id="v-home">
+  <div class="bal" id="bal">—</div><div class="delta" id="delta"></div><div class="sub" id="night"></div>
+  <svg class="chart" id="chart" viewBox="0 0 400 150" preserveAspectRatio="none"></svg>
+  <div class="card"><h3><span>Live screen · Bot's computer</span><span id="shotage"></span></h3><div class="screen" id="screen">No screenshot yet</div><div class="ord" id="lastord"><span class="sub">No orders yet</span></div></div>
+  <div class="card"><h3><span id="botshdr">Bots</span></h3><div id="botlist"></div></div>
+  <div class="card"><h3>Open positions</h3><div id="poslist"></div></div>
+ </section>
+ <section class="view" id="v-bots"><div class="card"><h3>Scanner · last verdicts</h3><div id="scanlist"></div></div><div class="card"><h3>Filters</h3><div id="filters"></div></div></section>
+ <section class="view" id="v-activity"><div class="card"><h3>Activity</h3><div id="actlist"></div></div><div class="card"><h3>Closed trades tonight</h3><div id="tradelist"></div></div></section>
+</div>
+<nav class="tabs"><a href="#home" class="on"><i>⌂</i>Home</a><a href="#bots"><i>◎</i>Bots</a><a href="#activity"><i>≡</i>Activity</a></nav>
+<script>
+// Read-only. Near-live source: GitHub contents API with ETag revalidation (304s don't count against the 60/h
+// unauthenticated limit). Fallback when the limit is hit: raw.githubusercontent.com (cached up to 5 min).
+const API="https://api.github.com/repos/gistaty12345-jpg/fomo-desk/contents/state.json?ref=main";
+const RAW="https://raw.githubusercontent.com/gistaty12345-jpg/fomo-desk/main/state.json";
+const $=id=>document.getElementById(id);let S=null,src="api",rawUntil=0,lastTxt="";
+const usd=v=>v==null?"—":"$"+Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+const ago=ts=>{const s=Math.max(0,Math.round(Date.now()/1000-ts));return s<60?s+"s ago":s<3600?Math.round(s/60)+"m ago":Math.round(s/3600)+"h ago"};
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const okLink=u=>/^https:\/\/fomo\.family\/coin\?address=[1-9A-HJ-NP-Za-km-z]{32,44}&chainId=1399811149&r=savipww&source=share_link$/.test(u||"");
+const lnk=u=>okLink(u)?` <a href="${esc(u)}" target="_blank" rel="noopener">FOMO</a>`:"";
+const BOTS={scanner:["Scanner","🔭","#1e3a8a"],analyst:["Analyst","🧪","#5b21b6"],brain:["Brain","🧠","#9d174d"],executor:["Executor","⚡","#065f46"],risk:["Risk","🛡","#7f1d1d"]};
+function show(v){document.querySelectorAll(".view").forEach(e=>e.classList.toggle("on",e.id=="v-"+v));document.querySelectorAll(".tabs a").forEach(a=>a.classList.toggle("on",a.hash=="#"+v))}
+window.onhashchange=()=>show(location.hash.slice(1)||"home");
+async function load(){
+ try{let r;
+  if(Date.now()>rawUntil){r=await fetch(API,{cache:"no-cache",headers:{Accept:"application/vnd.github.raw"}});
+   const rem=+r.headers.get("x-ratelimit-remaining");
+   if(r.status==403||r.status==429||(rem&&rem<2)){const reset=+r.headers.get("x-ratelimit-reset")||0;rawUntil=reset?reset*1000:Date.now()+600000;if(!r.ok)r=null}
+   src="live"}
+  if(!r||!r.ok){r=await fetch(RAW+"?t="+Date.now(),{cache:"no-store"});src="cached ≤5 min"}
+  if(!r.ok)throw new Error(r.status);const txt=await r.text();if(txt!==lastTxt){lastTxt=txt;S=JSON.parse(txt)}render()
+ }catch(e){$("sync").textContent="offline · retrying"}}
+function dot(v){return `<span class="dot ${v===true?"ok":v===false?"bad":""}"></span>`}
+function chart(){const pts=(S.equity_points||[]).concat([{t:S.updated,v:S.equity}]);const svg=$("chart");if(pts.length<2){svg.innerHTML="";return}
+ const v=pts.map(p=>p.v),mn=Math.min(...v),mx=Math.max(...v),sp=(mx-mn)||Math.max(0.5,mx*0.05),lo=mn-(mx==mn?sp/2:0),t0=pts[0].t,tn=pts.at(-1).t||t0+1;
+ const xy=pts.map(p=>[(p.t-t0)/((tn-t0)||1)*400,140-(p.v-lo)/sp*125]);const c=v.at(-1)>=v[0]?"#22c55e":"#ef4444";const d="M"+xy.map(p=>p.map(n=>n.toFixed(1)).join(",")).join("L");
+ svg.innerHTML=`<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c}" stop-opacity=".28"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></linearGradient></defs><path d="${d}L400,150L0,150Z" fill="url(#g)"/><path d="${d}" fill="none" stroke="${c}" stroke-width="2.2" vector-effect="non-scaling-stroke"/>`}
+function render(){const s=S;if(!s)return;
+ $("mode").textContent=s.mode;$("mode").className="mode"+(s.mode=="LIVE"?" live":"");$("handle").textContent="@"+s.handle;$("av").textContent=(s.handle||"?")[0].toUpperCase();
+ $("sync").textContent=`updated ${ago(s.updated)} · ${src}`;$("bal").textContent=usd(s.equity);
+ const d=s.pnl;$("delta").innerHTML=`<span class="${d>=0?"pos":"neg"}">${d>=0?"+":"−"}${usd(Math.abs(d))} (${s.pnl_pct.toFixed(1)}%) tonight</span><span class="pill ${d>=0?"pos":"neg"}">${s.multiple.toFixed(2)}x</span>`;
+ $("night").textContent=`Cash ${usd(s.cash)} · night started ${new Date(s.night_started*1000).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}`;chart();
+ const li=s.live_image;if(li&&li.url&&/^https:\/\/raw\.githubusercontent\.com\/gistaty12345-jpg\/fomo-desk\//.test(li.url)){const sc=$("screen");if(sc.dataset.u!==li.url){sc.dataset.u=li.url;sc.style.backgroundImage=`url("${li.url}")`;sc.textContent=""}$("shotage").textContent=ago(li.ts)}
+ const o=s.last_order;$("lastord").innerHTML=o?`<span>${o.side=="buy"?"Buy":"Sell"} ${esc(o.symbol)} · ${usd(o.usd)} · ${esc(o.status)}${lnk(o.link)}</span><span class="sub">${ago(o.ts)}</span><span class="dots">${dot(o.checks.screen)}${dot(o.checks.api)}${dot(o.checks.chain)}</span>`:'<span class="sub">No orders yet</span>';
+ const run=s.bots.filter(b=>b.running).length;$("botshdr").textContent=`Bots · ${run} running`;
+ $("botlist").innerHTML=s.bots.map(b=>{const m=BOTS[b.key]||[b.key,"•","#333"];return `<div class="row"><div class="ic" style="background:${m[2]}">${m[1]}</div><div><div class="t">${m[0]}</div><div class="s">${esc(b.stat)}</div></div><div class="r ${b.running?"pos":"neg"}">${b.running?"●":"stale"}</div></div>`}).join("");
+ const L=(a,f,e)=>a&&a.length?a.map(f).join(""):`<div class="empty">${e}</div>`;
+ $("poslist").innerHTML=L(s.positions,p=>`<div class="row"><div><div class="t">${esc(p.symbol)}${p.closing?' <span class="pill neg">selling</span>':""}</div><div class="s">stop ${p.stop_line.toPrecision(3)} · ${usd(p.usd_in)} in</div></div><div class="r ${p.pnl_pct>=0?"pos":"neg"}">${p.pnl_pct>=0?"+":""}${p.pnl_pct.toFixed(1)}%${lnk(p.link)}</div></div>`,"Nothing open");
+ $("scanlist").innerHTML=L(s.verdicts,v=>`<div class="row"><div><div class="t">${esc(v.symbol||"?")}</div><div class="s">${ago(v.ts)} · liq ${v.liq==null?"—":v.liq>=1000?"$"+(v.liq/1000).toFixed(1)+"K":"$"+Math.round(v.liq)} · top10 ${v.top10==null?"—":v.top10+"%"}</div></div><div class="r ${v.verdict=="pass"?"pos":"neg"}">${esc(v.verdict=="pass"?"pass":v.reason)}${lnk(v.link)}</div></div>`,"No verdicts yet");
+ const f=s.filters;$("filters").innerHTML=[["Min liquidity","$"+f.min_liquidity_usd.toLocaleString()],["Top-10 limit (Scanner)",f.scanner_top10_pct+"%"],["Top-10 limit (Analyst)",f.analyst_top10_pct+"%"],["Min score",f.min_score],["Ticket","$"+f.ticket_usd+" flat"],["Stop","−"+f.stop_pct+"%"]].map(x=>`<div class="kv"><span>${x[0]}</span><span>${x[1]}</span></div>`).join("");
+ $("actlist").innerHTML=L(s.activity,a=>`<div class="row"><div><div class="t">${esc(a.title)}</div><div class="s">${esc(a.sub)} · ${ago(a.ts)}</div></div><div class="r">${esc(a.amount)}${lnk(a.link)}</div></div>`,"No activity yet");
+ $("tradelist").innerHTML=L(s.trades,t=>`<div class="row"><div><div class="t">${esc(t.symbol)}</div><div class="s">${esc(t.rule)} · ${ago(t.ts)}</div></div><div class="r ${t.pnl>=0?"pos":"neg"}">${t.pnl>=0?"+":"−"}${usd(Math.abs(t.pnl))} (${t.pct.toFixed(0)}%)</div></div>`,"No closed trades yet")}
+onhashchange();load();setInterval(load,5000);setInterval(render,15000);
+</script></body></html>
