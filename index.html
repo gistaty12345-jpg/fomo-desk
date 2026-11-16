@@ -37,11 +37,11 @@
 </div>
 <nav class="tabs"><a href="#home" class="on"><i>⌂</i>Home</a><a href="#bots"><i>◎</i>Bots</a><a href="#activity"><i>≡</i>Activity</a></nav>
 <script>
-// Read-only. Near-live source: GitHub contents API with ETag revalidation (304s don't count against the 60/h
-// unauthenticated limit). Fallback when the limit is hit: raw.githubusercontent.com (cached up to 5 min).
-const API="https://api.github.com/repos/gistaty12345-jpg/fomo-desk/contents/state.json?ref=main";
-const RAW="https://raw.githubusercontent.com/gistaty12345-jpg/fomo-desk/main/state.json";
-const $=id=>document.getElementById(id);let S=null,src="api",rawUntil=0,lastTxt="";
+// Read-only. Near-live source: the publisher writes each snapshot to a brand-new path s-{slot}.json (slot =
+// 30s) on the 'live' branch. raw.githubusercontent.com serves a never-requested path fresh, so fetching the
+// current slot's file gives data a few seconds old with no API rate limit. Fallback: live/state.json (cached ≤5 min).
+const RAWL="https://raw.githubusercontent.com/gistaty12345-jpg/fomo-desk/live/";
+const $=id=>document.getElementById(id);let S=null,src="",have=-1,dead=new Set(),lag=6,lastOk=0,slotS=30;
 const usd=v=>v==null?"—":"$"+Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 const ago=ts=>{const s=Math.max(0,Math.round(Date.now()/1000-ts));return s<60?s+"s ago":s<3600?Math.round(s/60)+"m ago":Math.round(s/3600)+"h ago"};
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -50,15 +50,16 @@ const lnk=u=>okLink(u)?` <a href="${esc(u)}" target="_blank" rel="noopener">FOMO
 const BOTS={scanner:["Scanner","🔭","#1e3a8a"],analyst:["Analyst","🧪","#5b21b6"],brain:["Brain","🧠","#9d174d"],executor:["Executor","⚡","#065f46"],risk:["Risk","🛡","#7f1d1d"]};
 function show(v){document.querySelectorAll(".view").forEach(e=>e.classList.toggle("on",e.id=="v-"+v));document.querySelectorAll(".tabs a").forEach(a=>a.classList.toggle("on",a.hash=="#"+v))}
 window.onhashchange=()=>show(location.hash.slice(1)||"home");
-async function load(){
- try{let r;
-  if(Date.now()>rawUntil){r=await fetch(API,{cache:"no-cache",headers:{Accept:"application/vnd.github.raw"}});
-   const rem=+r.headers.get("x-ratelimit-remaining");
-   if(r.status==403||r.status==429||(rem&&rem<2)){const reset=+r.headers.get("x-ratelimit-reset")||0;rawUntil=reset?reset*1000:Date.now()+600000;if(!r.ok)r=null}
-   src="live"}
-  if(!r||!r.ok){r=await fetch(RAW+"?t="+Date.now(),{cache:"no-store"});src="cached ≤5 min"}
-  if(!r.ok)throw new Error(r.status);const txt=await r.text();if(txt!==lastTxt){lastTxt=txt;S=JSON.parse(txt)}render()
- }catch(e){$("sync").textContent="offline · retrying"}}
+async function get(u){const r=await fetch(u,{cache:"no-store"});if(!r.ok)return r.status;return JSON.parse(await r.text())}
+let busy=0;async function load(){if(busy)return;busy=1;
+ try{const want=Math.floor((Date.now()/1000-lag)/slotS);
+  if(have<0){for(const k of [want-1,want-2]){const j=await get(RAWL+`s-${k}.json`);if(typeof j=="object"){S=j;have=k;lastOk=Date.now();src="live";break}}}
+  if(want>have&&!dead.has(want)){const j=await get(RAWL+`s-${want}.json`);
+   if(typeof j=="object"){S=j;have=want;lastOk=Date.now();src="live";slotS=j.slot_s||30;lag=Math.max(4,lag-0.5)}
+   else{dead.add(want);lag=Math.min(40,lag+4)}}
+  if(Date.now()-lastOk>90000){const j=await get(RAWL+"state.json?t="+Date.now());if(typeof j=="object"&&(!S||j.updated>S.updated)){S=j;src="cached ≤5 min"}}
+  render()
+ }catch(e){$("sync").textContent="offline · retrying"}finally{busy=0}}
 function dot(v){return `<span class="dot ${v===true?"ok":v===false?"bad":""}"></span>`}
 function chart(){const pts=(S.equity_points||[]).concat([{t:S.updated,v:S.equity}]);const svg=$("chart");if(pts.length<2){svg.innerHTML="";return}
  const v=pts.map(p=>p.v),mn=Math.min(...v),mx=Math.max(...v),sp=(mx-mn)||Math.max(0.5,mx*0.05),lo=mn-(mx==mn?sp/2:0),t0=pts[0].t,tn=pts.at(-1).t||t0+1;
@@ -66,10 +67,10 @@ function chart(){const pts=(S.equity_points||[]).concat([{t:S.updated,v:S.equity
  svg.innerHTML=`<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c}" stop-opacity=".28"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></linearGradient></defs><path d="${d}L400,150L0,150Z" fill="url(#g)"/><path d="${d}" fill="none" stroke="${c}" stroke-width="2.2" vector-effect="non-scaling-stroke"/>`}
 function render(){const s=S;if(!s)return;
  $("mode").textContent=s.mode;$("mode").className="mode"+(s.mode=="LIVE"?" live":"");$("handle").textContent="@"+s.handle;$("av").textContent=(s.handle||"?")[0].toUpperCase();
- $("sync").textContent=`updated ${ago(s.updated)} · ${src}`;$("bal").textContent=usd(s.equity);
+ $("sync").textContent=`updated ${ago(s.updated)} · ${src}`+(s.changed?` · changed ${ago(s.changed)}`:"");$("bal").textContent=usd(s.equity);
  const d=s.pnl;$("delta").innerHTML=`<span class="${d>=0?"pos":"neg"}">${d>=0?"+":"−"}${usd(Math.abs(d))} (${s.pnl_pct.toFixed(1)}%) tonight</span><span class="pill ${d>=0?"pos":"neg"}">${s.multiple.toFixed(2)}x</span>`;
  $("night").textContent=`Cash ${usd(s.cash)} · night started ${new Date(s.night_started*1000).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}`;chart();
- const li=s.live_image;if(li&&li.url&&/^https:\/\/raw\.githubusercontent\.com\/gistaty12345-jpg\/fomo-desk\//.test(li.url)){const sc=$("screen");if(sc.dataset.u!==li.url){sc.dataset.u=li.url;sc.style.backgroundImage=`url("${li.url}")`;sc.textContent=""}$("shotage").textContent=ago(li.ts)}
+ const li=s.live_image;if(li&&li.url&&/^https:\/\/raw\.githubusercontent\.com\/gistaty12345-jpg\/fomo-desk\/live\/img-\d+\.png$/.test(li.url)){const sc=$("screen");if(sc.dataset.u!==li.url){sc.dataset.u=li.url;sc.style.backgroundImage=`url("${li.url}")`;sc.textContent=""}$("shotage").textContent=ago(li.ts)}
  const o=s.last_order;$("lastord").innerHTML=o?`<span>${o.side=="buy"?"Buy":"Sell"} ${esc(o.symbol)} · ${usd(o.usd)} · ${esc(o.status)}${lnk(o.link)}</span><span class="sub">${ago(o.ts)}</span><span class="dots">${dot(o.checks.screen)}${dot(o.checks.api)}${dot(o.checks.chain)}</span>`:'<span class="sub">No orders yet</span>';
  const run=s.bots.filter(b=>b.running).length;$("botshdr").textContent=`Bots · ${run} running`;
  $("botlist").innerHTML=s.bots.map(b=>{const m=BOTS[b.key]||[b.key,"•","#333"];return `<div class="row"><div class="ic" style="background:${m[2]}">${m[1]}</div><div><div class="t">${m[0]}</div><div class="s">${esc(b.stat)}</div></div><div class="r ${b.running?"pos":"neg"}">${b.running?"●":"stale"}</div></div>`}).join("");
@@ -79,5 +80,5 @@ function render(){const s=S;if(!s)return;
  const f=s.filters;$("filters").innerHTML=[["Min liquidity","$"+f.min_liquidity_usd.toLocaleString()],["Top-10 limit (Scanner)",f.scanner_top10_pct+"%"],["Top-10 limit (Analyst)",f.analyst_top10_pct+"%"],["Min score",f.min_score],["Ticket","$"+f.ticket_usd+" flat"],["Stop","−"+f.stop_pct+"%"]].map(x=>`<div class="kv"><span>${x[0]}</span><span>${x[1]}</span></div>`).join("");
  $("actlist").innerHTML=L(s.activity,a=>`<div class="row"><div><div class="t">${esc(a.title)}</div><div class="s">${esc(a.sub)} · ${ago(a.ts)}</div></div><div class="r">${esc(a.amount)}${lnk(a.link)}</div></div>`,"No activity yet");
  $("tradelist").innerHTML=L(s.trades,t=>`<div class="row"><div><div class="t">${esc(t.symbol)}</div><div class="s">${esc(t.rule)} · ${ago(t.ts)}</div></div><div class="r ${t.pnl>=0?"pos":"neg"}">${t.pnl>=0?"+":"−"}${usd(Math.abs(t.pnl))} (${t.pct.toFixed(0)}%)</div></div>`,"No closed trades yet")}
-onhashchange();load();setInterval(load,5000);setInterval(render,15000);
+onhashchange();load();setInterval(load,3000);setInterval(render,15000);
 </script></body></html>
